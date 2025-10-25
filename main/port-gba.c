@@ -2,7 +2,7 @@
 #include <string.h>
 #include <sys/time.h>
 
-#include "host.h"
+#include "../../host.h"
 
 extern struct MiniRV32IMAState core;
 extern void DumpState(struct MiniRV32IMAState *core);
@@ -35,11 +35,13 @@ int psram_init(void)
 int psram_read(u32 addr, void *buf, int len)
 {
 	H_ReadMemBuf(buf, addr, len);
+	return 0;
 }
 
 int psram_write(u32 addr, void *buf, int len)
 {
 	H_WriteMemBuf(buf, addr, len);
+	return 0;
 }
 
 int load_images(int ram_size, int *kern_len)
