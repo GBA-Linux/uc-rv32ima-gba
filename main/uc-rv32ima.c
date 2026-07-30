@@ -121,9 +121,10 @@ restart:
 	while (1) {
 		int ret;
 		uint64_t *this_ccount = ((uint64_t*)&core.cyclel);
-		uint32_t elapsedUs = GetTimeMicroseconds() / 6 - lastTime;
+		uint64_t now = GetTimeMicroseconds();
+		uint32_t elapsedUs = (uint32_t)(now - lastTime);
 
-		lastTime += elapsedUs;
+		lastTime = now;
 		 // Execute upto 1024 cycles before breaking out.
 		ret = MiniRV32IMAStep(&core, NULL, 0, elapsedUs, instrs_per_flip);
 		switch (ret) {
