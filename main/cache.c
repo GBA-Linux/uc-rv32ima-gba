@@ -11,6 +11,11 @@
 #include "cache.h"
 #include "psram.h"
 
+#ifdef EWRAM_DATA
+#undef EWRAM_DATA
+#endif
+
+/* .ewram_data doesn't exist, yet the EWRAM_DATA macro tries to put it there; use our own */
 #define EWRAM_DATA __attribute__((section(".ewram")))
 
 #define CACHE_SIZE	(128 * 1024)
@@ -31,7 +36,7 @@ struct cacheline {
 static uint64_t accessed, hit;
 static uint32_t tags[CACHE_SETS][CACHE_WAYS];
 static EWRAM_DATA struct cacheline cachelines[CACHE_SETS][CACHE_WAYS];
-static uint64_t valid_bytes[CACHE_SETS][CACHE_WAYS];
+static EWRAM_DATA uint64_t valid_bytes[CACHE_SETS][CACHE_WAYS];
 
 /*
  * bit[0]: valid

@@ -17,6 +17,7 @@
 #include "port.h"
 #include "cache.h"
 #include "psram.h"
+#include <gba.h>
 
 static uint32_t ram_amt = 8 * 1024 * 1024;
 
@@ -96,7 +97,7 @@ void DumpState(struct MiniRV32IMAState *core)
 
 struct MiniRV32IMAState core;
 
-void app_main(void)
+IWRAM_CODE ARM_CODE void app_main(void)
 {
 	printf("psram init\n");
 
