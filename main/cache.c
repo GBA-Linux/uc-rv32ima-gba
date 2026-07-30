@@ -17,6 +17,7 @@
 
 /* .ewram_data doesn't exist, yet the EWRAM_DATA macro tries to put it there; use our own */
 #define EWRAM_DATA __attribute__((section(".ewram")))
+#define ARM_CODE __attribute__((target("arm")))
 
 #define CACHE_SIZE	(128 * 1024)
 #define CACHE_LINE_SIZE	64
@@ -33,7 +34,11 @@ struct cacheline {
 	uint8_t data[CACHE_LINE_SIZE];
 };
 
-static uint64_t accessed, hit;
+/*
+ * These counters are diagnostic only.  64-bit increments are particularly
+ * expensive on ARM7TDMI and used to be performed for every instruction fetch.
+ */
+static uint32_t accessed, hit;
 static uint32_t tags[CACHE_SETS][CACHE_WAYS];
 static EWRAM_DATA struct cacheline cachelines[CACHE_SETS][CACHE_WAYS];
 static EWRAM_DATA uint64_t valid_bytes[CACHE_SETS][CACHE_WAYS];
@@ -48,6 +53,7 @@ static EWRAM_DATA uint64_t valid_bytes[CACHE_SETS][CACHE_WAYS];
 #define VALID		(1 << 0)
 #define DIRTY		(1 << 1)
 #define LRU		(1 << 2)
+#define FULL		(1 << 3)
 #define LRU_SFT		2
 #define TAG_MSK		CACHE_TAG_MASK
 
@@ -87,6 +93,7 @@ static void complete_line(uint32_t *tag, uint8_t *data, uint64_t *valid)
 			data[i] = old_data[i];
 	}
 	*valid = UINT64_MAX;
+	*tag |= FULL;
 }
 
 static void writeback_line(uint32_t *tag, uint8_t *data, uint64_t *valid)
@@ -98,7 +105,7 @@ static void writeback_line(uint32_t *tag, uint8_t *data, uint64_t *valid)
 	psram_write(*tag & ~(CACHE_LINE_SIZE - 1), data, CACHE_LINE_SIZE);
 }
 
-void cache_write(uint32_t ofs, void *buf, uint32_t size)
+ARM_CODE void cache_write(uint32_t ofs, void *buf, uint32_t size)
 {
 	if (((ofs | (CACHE_LINE_SIZE - 1)) !=
 	     ((ofs + size - 1) | (CACHE_LINE_SIZE - 1))))
@@ -149,23 +156,25 @@ void cache_write(uint32_t ofs, void *buf, uint32_t size)
 	tags[index][1] |= (ti << LRU_SFT);
 	memcpy(p + (ofs & (CACHE_LINE_SIZE - 1)), buf, size);
 	*valid |= byte_mask(ofs & (CACHE_LINE_SIZE - 1), size);
+	if (*valid == UINT64_MAX)
+		*tp |= FULL;
 	*tp |= DIRTY;
 }
 
-void cache_read(uint32_t ofs, void *buf, uint32_t size)
+/*
+ * Resolve an address for reading.  Lines brought in by reads are always FULL,
+ * so the overwhelmingly common instruction-fetch path does no 64-bit work.
+ * A read from a partial store-allocated line completes it once here.
+ */
+static inline __attribute__((always_inline, target("arm")))
+uint8_t *cache_read_ptr(uint32_t ofs)
 {
-	if (((ofs | (CACHE_LINE_SIZE - 1)) !=
-	     ((ofs + size - 1) | (CACHE_LINE_SIZE - 1))))
-		printf("read cross boundary, ofs:%x size:%x\n", ofs, size);
-
 	int ti, i, index = get_index(ofs);
 	uint32_t *tp;
 	uint8_t *p;
 	uint64_t *valid;
-	uint64_t requested;
 
 	++accessed;
-	requested = byte_mask(ofs & (CACHE_LINE_SIZE - 1), size);
 
 	for (i = 0; i < CACHE_WAYS; i++) {
 		tp = &tags[index][i];
@@ -175,7 +184,7 @@ void cache_read(uint32_t ofs, void *buf, uint32_t size)
 			if ((*tp & TAG_MSK) == (ofs & TAG_MSK)) {
 				++hit;
 				ti = i;
-				if ((*valid & requested) != requested)
+				if (!(*tp & FULL))
 					complete_line(tp, p, valid);
 				break;
 			} else {
@@ -191,7 +200,7 @@ void cache_read(uint32_t ofs, void *buf, uint32_t size)
 				psram_read(ofs & ~(CACHE_LINE_SIZE - 1), p,
 					CACHE_LINE_SIZE);
 				*tp = ofs & ~(CACHE_LINE_SIZE - 1);
-				*tp |= VALID;
+				*tp |= VALID | FULL;
 				*valid = UINT64_MAX;
 			}
 		} else {
@@ -202,14 +211,39 @@ void cache_read(uint32_t ofs, void *buf, uint32_t size)
 			psram_read(ofs & ~(CACHE_LINE_SIZE - 1), p,
 				CACHE_LINE_SIZE);
 			*tp = ofs & ~(CACHE_LINE_SIZE - 1);
-			*tp |= VALID;
+			*tp |= VALID | FULL;
 			*valid = UINT64_MAX;
 		}
 	}
 
 	tags[index][1] &= ~(LRU);
 	tags[index][1] |= (ti << LRU_SFT);
-	memcpy(buf, p + (ofs & (CACHE_LINE_SIZE - 1)), size);
+	return p + (ofs & (CACHE_LINE_SIZE - 1));
+}
+
+ARM_CODE void cache_read(uint32_t ofs, void *buf, uint32_t size)
+{
+	if (((ofs | (CACHE_LINE_SIZE - 1)) !=
+	     ((ofs + size - 1) | (CACHE_LINE_SIZE - 1))))
+		printf("read cross boundary, ofs:%x size:%x\n", ofs, size);
+
+	uint8_t *p = cache_read_ptr(ofs);
+	memcpy(buf, p, size);
+}
+
+ARM_CODE uint32_t cache_read32(uint32_t ofs)
+{
+	return *(uint32_t *)cache_read_ptr(ofs);
+}
+
+ARM_CODE uint16_t cache_read16(uint32_t ofs)
+{
+	return *(uint16_t *)cache_read_ptr(ofs);
+}
+
+ARM_CODE uint8_t cache_read8(uint32_t ofs)
+{
+	return *cache_read_ptr(ofs);
 }
 
 void cache_get_stat(uint64_t *phit, uint64_t *paccessed)

@@ -57,23 +57,17 @@ static void MINIRV32_STORE1(uint32_t ofs, uint8_t val)
 
 static uint32_t MINIRV32_LOAD4(uint32_t ofs)
 {
-	uint32_t val;
-	cache_read(ofs, &val, 4);
-	return val;
+	return cache_read32(ofs);
 }
 
 static uint16_t MINIRV32_LOAD2(uint32_t ofs)
 {
-	uint16_t val;
-	cache_read(ofs, &val, 2);
-	return val;
+	return cache_read16(ofs);
 }
 
 static uint8_t MINIRV32_LOAD1(uint32_t ofs)
 {
-	uint8_t val;
-	cache_read(ofs, &val, 1);
-	return val;
+	return cache_read8(ofs);
 }
 
 #include "mini-rv32ima.h"
