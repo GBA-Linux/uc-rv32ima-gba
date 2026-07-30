@@ -31,7 +31,7 @@ struct cacheline {
 static uint64_t accessed, hit;
 static uint32_t tags[CACHE_SETS][CACHE_WAYS];
 static EWRAM_DATA struct cacheline cachelines[CACHE_SETS][CACHE_WAYS];
-static EWRAM_DATA uint64_t valid_bytes[CACHE_SETS][CACHE_WAYS];
+static uint64_t valid_bytes[CACHE_SETS][CACHE_WAYS];
 
 /*
  * bit[0]: valid
