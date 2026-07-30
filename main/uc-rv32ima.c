@@ -171,7 +171,7 @@ static uint32_t HandleException(uint32_t ir, uint32_t code)
 static uint32_t HandleControlStore(uint32_t addy, uint32_t val)
 {
 	//UART 8250 / 16550 Data Buffer
-	if (addy == 0x10000000) {
+	if (addy == 0x10000000 && val != 0) {
 		printf("%c", val);
 		fflush(stdout);
 	}
